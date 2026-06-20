@@ -1,6 +1,5 @@
 name: Build StudentOS
 
-# This tells the factory to run whenever you click the "Run workflow" button
 on: 
   workflow_dispatch:
 
@@ -21,14 +20,13 @@ jobs:
         run: |
           mkdir build-env
           cd build-env
-          # We use Bookworm because it natively includes universal Wi-Fi/GPU firmware
           sudo lb config -d bookworm --archive-areas "main contrib non-free non-free-firmware"
 
       - name: Write the Software Manifest
         run: |
           cd build-env
-          mkdir -p config/package-lists
-          cat <<EOF > config/package-lists/studentos.list.chroot
+          sudo mkdir -p config/package-lists
+          cat << 'EOF' | sudo tee config/package-lists/studentos.list.chroot
           # Core Engine & Hardware Drivers
           linux-image-amd64
           linux-firmware-free
@@ -54,8 +52,8 @@ jobs:
       - name: Inject StudentOS Identity (White-Labeling)
         run: |
           cd build-env
-          mkdir -p config/includes.chroot/etc
-          cat <<EOF > config/includes.chroot/etc/os-release
+          sudo mkdir -p config/includes.chroot/etc
+          cat << 'EOF' | sudo tee config/includes.chroot/etc/os-release
           PRETTY_NAME="StudentOS 1.0"
           NAME="StudentOS"
           ID=studentos
