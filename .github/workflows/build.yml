@@ -14,13 +14,20 @@ jobs:
       - name: Install Factory Tools
         run: |
           sudo apt-get update
-          sudo apt-get install -y live-build
+          # Added debian-archive-keyring so the Ubuntu server can verify Debian files
+          sudo apt-get install -y live-build debian-archive-keyring
 
       - name: Initialize Debian Bookworm Base
         run: |
           mkdir build-env
           cd build-env
-          sudo lb config -d bookworm --archive-areas "main contrib non-free non-free-firmware"
+          # Added --mode debian and explicit mirror links to point to Debian servers
+          sudo lb config -d bookworm \
+            --mode debian \
+            --mirror-bootstrap "http://deb.debian.org/debian/" \
+            --mirror-chroot "http://deb.debian.org/debian/" \
+            --mirror-binary "http://deb.debian.org/debian/" \
+            --archive-areas "main contrib non-free non-free-firmware"
 
       - name: Write the Software Manifest
         run: |
