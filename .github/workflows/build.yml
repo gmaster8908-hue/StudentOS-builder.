@@ -1,0 +1,75 @@
+name: Build StudentOS
+
+# This tells the factory to run whenever you click the "Run workflow" button
+on: 
+  workflow_dispatch:
+
+jobs:
+  build-iso:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Install Factory Tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y live-build
+
+      - name: Initialize Debian Bookworm Base
+        run: |
+          mkdir build-env
+          cd build-env
+          # We use Bookworm because it natively includes universal Wi-Fi/GPU firmware
+          sudo lb config -d bookworm --archive-areas "main contrib non-free non-free-firmware"
+
+      - name: Write the Software Manifest
+        run: |
+          cd build-env
+          mkdir -p config/package-lists
+          cat <<EOF > config/package-lists/studentos.list.chroot
+          # Core Engine & Hardware Drivers
+          linux-image-amd64
+          linux-firmware-free
+          live-boot
+          live-config
+          systemd-sysv
+          network-manager
+          
+          # The Graphical Interface
+          xserver-xorg-core
+          xinit
+          openbox
+          plank
+          
+          # The Applications
+          epiphany-browser
+          pulseaudio
+          
+          # The Installer (For commercial deployment)
+          calamares
+          EOF
+
+      - name: Inject StudentOS Identity (White-Labeling)
+        run: |
+          cd build-env
+          mkdir -p config/includes.chroot/etc
+          cat <<EOF > config/includes.chroot/etc/os-release
+          PRETTY_NAME="StudentOS 1.0"
+          NAME="StudentOS"
+          ID=studentos
+          VERSION_ID="1.0"
+          HOME_URL="https://studentos.com"
+          EOF
+
+      - name: Compile the Operating System
+        run: |
+          cd build-env
+          sudo lb build
+
+      - name: Upload the Finished ISO
+        uses: actions/upload-artifact@v4
+        with:
+          name: StudentOS-ISO
+          path: build-env/*.iso
