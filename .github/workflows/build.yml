@@ -20,15 +20,14 @@ jobs:
         run: |
           mkdir build-env
           cd build-env
-          # Added --security false and --updates false to bypass the folder naming error
+          # We keep --security false but remove the unrecognized updates flag
           sudo lb config -d bookworm \
             --mode debian \
             --mirror-bootstrap "http://deb.debian.org/debian/" \
             --mirror-chroot "http://deb.debian.org/debian/" \
             --mirror-binary "http://deb.debian.org/debian/" \
             --archive-areas "main contrib non-free non-free-firmware" \
-            --security false \
-            --updates false
+            --security false
 
       - name: Write the Software Manifest
         run: |
