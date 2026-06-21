@@ -35,6 +35,10 @@ jobs:
           cd build-env
           sudo mkdir -p config/package-lists
           cat << 'EOF' | sudo tee config/package-lists/studentos.list.chroot
+          # Bootloader Components (Required for Debian Bookworm)
+          isolinux
+          syslinux-efi
+          
           # Core Engine & Hardware Drivers (Kernel is handled automatically)
           firmware-linux-free
           live-boot
