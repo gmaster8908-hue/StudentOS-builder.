@@ -15,20 +15,21 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y live-build debian-archive-keyring
+          # Hotfix: Patch live-build to look for the contents file in the correct modern path
+          sudo sed -i 's|/Contents-|/main/Contents-|g' /usr/lib/live/build/lb_chroot_linux-image
 
       - name: Initialize Debian Bookworm Base
         run: |
           mkdir build-env
           cd build-env
-          # Added --contents none to avoid the 404 index error
+          # Removed the unrecognized --contents flag entirely
           sudo lb config -d bookworm \
             --mode debian \
             --mirror-bootstrap "http://deb.debian.org/debian/" \
             --mirror-chroot "http://deb.debian.org/debian/" \
             --mirror-binary "http://deb.debian.org/debian/" \
             --archive-areas "main contrib non-free non-free-firmware" \
-            --security false \
-            --contents none
+            --security false
 
       - name: Write the Software Manifest
         run: |
