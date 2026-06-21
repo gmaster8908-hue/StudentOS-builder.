@@ -35,8 +35,7 @@ jobs:
           cd build-env
           sudo mkdir -p config/package-lists
           cat << 'EOF' | sudo tee config/package-lists/studentos.list.chroot
-          # Core Engine & Hardware Drivers
-          linux-image-amd64
+          # Core Engine & Hardware Drivers (Kernel is handled automatically)
           firmware-linux-free
           live-boot
           live-config
