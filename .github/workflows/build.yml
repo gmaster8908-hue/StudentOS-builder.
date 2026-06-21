@@ -38,10 +38,12 @@ jobs:
           cd build-env
           sudo mkdir -p config/package-lists
           cat << 'EOF' | sudo tee config/package-lists/studentos.list.chroot
-          # Bootloader Components (Modern GRUB for UEFI support)
+          # Bootloader Components (Modern GRUB for UEFI support + Hybrid Tools)
           grub-pc-bin
           grub-efi-amd64-bin
           mtools
+          syslinux-utils
+          syslinux-common
           
           # Core Engine & Hardware Drivers (Kernel is handled automatically)
           firmware-linux-free
