@@ -14,8 +14,8 @@ jobs:
       - name: Install Factory Tools
         run: |
           sudo apt-get update
-          # Swapped legacy syslinux tools for modern GRUB EFI tools
-          sudo apt-get install -y live-build debian-archive-keyring squashfs-tools xorriso mtools grub-pc-bin grub-efi-amd64-bin
+          # Added syslinux-utils to provide the 'isohybrid' command for the final step
+          sudo apt-get install -y live-build debian-archive-keyring squashfs-tools xorriso mtools grub-pc-bin grub-efi-amd64-bin syslinux-utils
           # Hotfix: Patch live-build to look for the contents file in the correct modern path
           sudo sed -i 's|/Contents-|/main/Contents-|g' /usr/lib/live/build/lb_chroot_linux-image
 
