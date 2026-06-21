@@ -1,4 +1,4 @@
-name: Build Studentos
+name: Build StudentOS (Debootstrap Method)
 
 on:
   workflow_dispatch:
@@ -7,61 +7,94 @@ jobs:
   build-iso:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout Code
-        uses: actions/checkout@v4
-
-      - name: Install Factory Tools
+      - name: Install ISO Building Tools
         run: |
           sudo apt-get update
-          sudo apt-get install -y live-build debian-archive-keyring squashfs-tools xorriso mtools grub-pc-bin grub-efi-amd64-bin syslinux-utils syslinux-common
+          # Install raw build tools instead of live-build
+          sudo apt-get install -y debootstrap squashfs-tools xorriso grub-pc-bin grub-efi-amd64-bin mtools
 
-      - name: Initialize Debian Bookworm Base
+      - name: Create Workspace Directories
         run: |
-          cd build-env
-          sudo lb config -d bookworm \
-                         --mode debian \
-                         --system live \
-                         --architectures amd64 \
-                         --binary-images iso-hybrid \
-                         --bootloader grub-efi
+          mkdir -p work/chroot
+          mkdir -p work/iso/live
+          mkdir -p work/iso/boot/grub
 
-      - name: Write the Software Manifest
+      - name: Download Base Debian OS (Debootstrap)
         run: |
-          cd build-env
-          sudo mkdir -p config/package-lists
-          cat << 'EOF' | sudo tee config/package-lists/studentos.list.chroot
-          grub-pc-bin
-          grub-efi-amd64-bin
-          mtools
-          syslinux-utils
-          syslinux-common
-          firmware-linux-free
-          live-boot
-          live-config
-          systemd-sysv
-          network-manager
-          xserver-xorg-core
-          xinit
-          openbox
-          plank
-          epiphany-browser
-          pulseaudio
-          calamares
+          # Pulls the raw Bookworm filesystem
+          sudo debootstrap --arch=amd64 bookworm work/chroot http://deb.debian.org/debian/
+
+      - name: Install StudentOS Software
+        run: |
+          # Bind mount system directories so apt works inside the chroot
+          sudo mount --bind /dev work/chroot/dev
+          sudo mount --bind /run work/chroot/run
+          sudo mount -t proc /proc work/chroot/proc
+          sudo mount -t sysfs /sys work/chroot/sys
+          
+          # Create a script to run inside the chroot environment
+          cat << 'EOF' | sudo tee work/chroot/setup.sh
+          #!/bin/bash
+          export DEBIAN_FRONTEND=noninteractive
+          
+          # Update the fresh OS
+          apt-get update
+          
+          # Install the Linux Kernel, Live Boot components, and your UI stack
+          apt-get install -y --no-install-recommends \
+            linux-image-amd64 \
+            live-boot \
+            systemd-sysv \
+            network-manager \
+            xserver-xorg-core \
+            xinit \
+            openbox \
+            nano \
+            calamares
+            
+          # Clean up apt caches to keep the ISO small
+          apt-get clean
+          EOF
+          
+          # Execute the script inside our new OS
+          sudo chmod +x work/chroot/setup.sh
+          sudo chroot work/chroot /setup.sh
+          
+          # Clean up mounts safely
+          sudo umount work/chroot/sys
+          sudo umount work/chroot/proc
+          sudo umount work/chroot/run
+          sudo umount work/chroot/dev
+          sudo rm work/chroot/setup.sh
+
+      - name: Extract Kernel and Compress Filesystem
+        run: |
+          # Move the bootable kernel and initramfs to the ISO staging area
+          sudo cp work/chroot/boot/vmlinuz-* work/iso/live/vmlinuz
+          sudo cp work/chroot/boot/initrd.img-* work/iso/live/initrd
+          
+          # Compress the entire OS into a squashfs file (this is the actual "Live OS")
+          sudo mksquashfs work/chroot work/iso/live/filesystem.squashfs -comp xz -e boot
+
+      - name: Configure GRUB Bootloader
+        run: |
+          # Write the boot menu configuration
+          cat << 'EOF' > work/iso/boot/grub/grub.cfg
+          search --set=root --file /live/vmlinuz
+
+          menuentry "Start StudentOS Live" {
+              linux /live/vmlinuz boot=live quiet splash
+              initrd /live/initrd
+          }
           EOF
 
-      - name: Compile the Operating System
+      - name: Compile Final ISO File
         run: |
-          cd build-env
-          sudo lb build
-
-      - name: Rename Artifact
-        run: |
-          cd build-env
-          # Standardize the output ISO filename for upload
-          mv live-image-amd64.hybrid.iso studentos-amd64.iso || mv live-image-amd64.iso studentos-amd64.iso || true
+          # grub-mkrescue securely packages the ISO for both BIOS and UEFI
+          grub-mkrescue -o studentos-amd64.iso work/iso
 
       - name: Upload the Finished ISO
         uses: actions/upload-artifact@v4
         with:
           name: studentos-amd64
-          path: build-env/studentos-amd64.iso
+          path: studentos-amd64.iso
