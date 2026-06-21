@@ -14,7 +14,8 @@ jobs:
       - name: Install Factory Tools
         run: |
           sudo apt-get update
-          sudo apt-get install -y live-build debian-archive-keyring squashfs-tools xorriso isolinux syslinux-efi syslinux-common
+          # Swapped legacy syslinux tools for modern GRUB EFI tools
+          sudo apt-get install -y live-build debian-archive-keyring squashfs-tools xorriso mtools grub-pc-bin grub-efi-amd64-bin
           # Hotfix: Patch live-build to look for the contents file in the correct modern path
           sudo sed -i 's|/Contents-|/main/Contents-|g' /usr/lib/live/build/lb_chroot_linux-image
 
@@ -22,8 +23,10 @@ jobs:
         run: |
           mkdir build-env
           cd build-env
+          # Added --bootloader grub-efi to force modern UEFI booting and bypass syslinux bugs
           sudo lb config -d bookworm \
             --mode debian \
+            --bootloader grub-efi \
             --mirror-bootstrap "http://deb.debian.org/debian/" \
             --mirror-chroot "http://deb.debian.org/debian/" \
             --mirror-binary "http://deb.debian.org/debian/" \
@@ -35,9 +38,10 @@ jobs:
           cd build-env
           sudo mkdir -p config/package-lists
           cat << 'EOF' | sudo tee config/package-lists/studentos.list.chroot
-          # Bootloader Components (Required for Debian Bookworm)
-          isolinux
-          syslinux-efi
+          # Bootloader Components (Modern GRUB for UEFI support)
+          grub-pc-bin
+          grub-efi-amd64-bin
+          mtools
           
           # Core Engine & Hardware Drivers (Kernel is handled automatically)
           firmware-linux-free
