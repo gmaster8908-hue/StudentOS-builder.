@@ -1,12 +1,11 @@
-name: Build StudentOS
+name: Build Studentos
 
-on: 
+on:
   workflow_dispatch:
 
 jobs:
   build-iso:
     runs-on: ubuntu-latest
-    
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
@@ -14,68 +13,40 @@ jobs:
       - name: Install Factory Tools
         run: |
           sudo apt-get update
-          # Added syslinux-utils to provide the 'isohybrid' command for the final step
-          sudo apt-get install -y live-build debian-archive-keyring squashfs-tools xorriso mtools grub-pc-bin grub-efi-amd64-bin syslinux-utils
-          # Hotfix: Patch live-build to look for the contents file in the correct modern path
-          sudo sed -i 's|/Contents-|/main/Contents-|g' /usr/lib/live/build/lb_chroot_linux-image
+          sudo apt-get install -y live-build debian-archive-keyring squashfs-tools xorriso mtools grub-pc-bin grub-efi-amd64-bin syslinux-utils syslinux-common
 
       - name: Initialize Debian Bookworm Base
         run: |
-          mkdir build-env
           cd build-env
-          # Added --bootloader grub-efi to force modern UEFI booting and bypass syslinux bugs
           sudo lb config -d bookworm \
-            --mode debian \
-            --bootloader grub-efi \
-            --mirror-bootstrap "http://deb.debian.org/debian/" \
-            --mirror-chroot "http://deb.debian.org/debian/" \
-            --mirror-binary "http://deb.debian.org/debian/" \
-            --archive-areas "main contrib non-free non-free-firmware" \
-            --security false
+                         --mode debian \
+                         --system live \
+                         --architectures amd64 \
+                         --binary-images iso-hybrid \
+                         --bootloader grub-efi
 
       - name: Write the Software Manifest
         run: |
           cd build-env
           sudo mkdir -p config/package-lists
           cat << 'EOF' | sudo tee config/package-lists/studentos.list.chroot
-          # Bootloader Components (Modern GRUB for UEFI support + Hybrid Tools)
           grub-pc-bin
           grub-efi-amd64-bin
           mtools
           syslinux-utils
           syslinux-common
-          
-          # Core Engine & Hardware Drivers (Kernel is handled automatically)
           firmware-linux-free
           live-boot
           live-config
           systemd-sysv
           network-manager
-          
-          # The Graphical Interface
           xserver-xorg-core
           xinit
           openbox
           plank
-          
-          # The Applications
           epiphany-browser
           pulseaudio
-          
-          # The Installer (For commercial deployment)
           calamares
-          EOF
-
-      - name: Inject StudentOS Identity (White-Labeling)
-        run: |
-          cd build-env
-          sudo mkdir -p config/includes.chroot/etc
-          cat << 'EOF' | sudo tee config/includes.chroot/etc/os-release
-          PRETTY_NAME="StudentOS 1.0"
-          NAME="StudentOS"
-          ID=studentos
-          VERSION_ID="1.0"
-          HOME_URL="https://studentos.com"
           EOF
 
       - name: Compile the Operating System
@@ -83,8 +54,14 @@ jobs:
           cd build-env
           sudo lb build
 
+      - name: Rename Artifact
+        run: |
+          cd build-env
+          # Standardize the output ISO filename for upload
+          mv live-image-amd64.hybrid.iso studentos-amd64.iso || mv live-image-amd64.iso studentos-amd64.iso || true
+
       - name: Upload the Finished ISO
         uses: actions/upload-artifact@v4
         with:
-          name: StudentOS-ISO
-          path: build-env/*.iso
+          name: studentos-amd64
+          path: build-env/studentos-amd64.iso
