@@ -22,7 +22,6 @@ jobs:
         run: |
           mkdir build-env
           cd build-env
-          # Removed the unrecognized --contents flag entirely
           sudo lb config -d bookworm \
             --mode debian \
             --mirror-bootstrap "http://deb.debian.org/debian/" \
@@ -38,7 +37,7 @@ jobs:
           cat << 'EOF' | sudo tee config/package-lists/studentos.list.chroot
           # Core Engine & Hardware Drivers
           linux-image-amd64
-          linux-firmware-free
+          firmware-linux-free
           live-boot
           live-config
           systemd-sysv
