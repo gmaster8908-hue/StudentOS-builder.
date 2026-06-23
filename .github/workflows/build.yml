@@ -7,93 +7,104 @@ jobs:
   build-iso:
     runs-on: ubuntu-latest
     steps:
-      - name: Install ISO Building Tools
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install build dependencies
         run: |
           sudo apt-get update
-          # Install raw build tools instead of live-build
-          sudo apt-get install -y debootstrap squashfs-tools xorriso grub-pc-bin grub-efi-amd64-bin mtools
+          sudo apt-get install -y debootstrap squashfs-tools xorriso grub-pc-bin grub-efi mtools
 
-      - name: Create Workspace Directories
+      - name: Set up build directories
         run: |
           mkdir -p work/chroot
           mkdir -p work/iso/live
           mkdir -p work/iso/boot/grub
 
-      - name: Download Base Debian OS (Debootstrap)
+      - name: Bootstrap Debian 12 (Bookworm)
         run: |
-          # Pulls the raw Bookworm filesystem
           sudo debootstrap --arch=amd64 bookworm work/chroot http://deb.debian.org/debian/
 
-      - name: Install StudentOS Software
+      - name: Mount virtual filesystems
         run: |
-          # Bind mount system directories so apt works inside the chroot
           sudo mount --bind /dev work/chroot/dev
-          sudo mount --bind /run work/chroot/run
-          sudo mount -t proc /proc work/chroot/proc
-          sudo mount -t sysfs /sys work/chroot/sys
-          
-          # Create a script to run inside the chroot environment
-          cat << 'EOF' | sudo tee work/chroot/setup.sh
-          #!/bin/bash
-          export DEBIAN_FRONTEND=noninteractive
-          
-          # Update the fresh OS
-          apt-get update
-          
-          # Install the Linux Kernel, Live Boot components, and your UI stack
-          apt-get install -y --no-install-recommends \
-            linux-image-amd64 \
-            live-boot \
-            systemd-sysv \
-            network-manager \
-            xserver-xorg-core \
-            xinit \
-            openbox \
-            nano \
-            calamares
+          sudo mount -t proc proc work/chroot/proc
+          sudo mount -t sysfs sysfs work/chroot/sys
+          sudo mount -t devpts devpts work/chroot/dev/pts
+
+      - name: Install StudentOS Software & Configure Autologin
+        run: |
+          sudo chroot work/chroot /bin/bash -c "
+            apt-get update
             
-          # Clean up apt caches to keep the ISO small
-          apt-get clean
-          EOF
-          
-          # Execute the script inside our new OS
-          sudo chmod +x work/chroot/setup.sh
-          sudo chroot work/chroot /setup.sh
-          
-          # Clean up mounts safely
+            # Install the Core UI Stack, your apps, and nodm for autologin
+            DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+              linux-image-amd64 \
+              live-boot \
+              systemd-sysv \
+              network-manager \
+              xserver-xorg-core \
+              xinit \
+              openbox \
+              nodm \
+              plank \
+              epiphany-browser \
+              nano \
+              calamares \
+              pulseaudio
+
+            # Configure nodm to automatically log in the default live 'user'
+            echo 'NODM_ENABLED=true' > /etc/default/nodm
+            echo 'NODM_USER=user' >> /etc/default/nodm
+            echo 'NODM_XINIT=/usr/bin/xinit' >> /etc/default/nodm
+            echo 'NODM_FIRST_VT=7' >> /etc/default/nodm
+
+            # Tell Xinit to launch Openbox automatically when the user logs in
+            mkdir -p /etc/skel
+            echo 'exec openbox-session' > /etc/skel/.xinitrc
+
+            # Create the default live user
+            useradd -m -s /bin/bash user
+            echo 'user:live' | chpasswd
+            usermod -aG sudo user
+
+            # Clean up downloaded packages to keep the ISO small
+            apt-get clean
+          "
+
+      - name: Unmount virtual filesystems
+        run: |
+          sudo umount work/chroot/dev/pts
           sudo umount work/chroot/sys
           sudo umount work/chroot/proc
-          sudo umount work/chroot/run
           sudo umount work/chroot/dev
-          sudo rm work/chroot/setup.sh
 
-      - name: Extract Kernel and Compress Filesystem
+      - name: Copy kernel and initrd
         run: |
-          # Move the bootable kernel and initramfs to the ISO staging area
-          sudo cp work/chroot/boot/vmlinuz-* work/iso/live/vmlinuz
-          sudo cp work/chroot/boot/initrd.img-* work/iso/live/initrd
-          
-          # Compress the entire OS into a squashfs file (this is the actual "Live OS")
-          sudo mksquashfs work/chroot work/iso/live/filesystem.squashfs -comp xz -e boot
+          cp work/chroot/boot/vmlinuz-* work/iso/live/vmlinuz
+          cp work/chroot/boot/initrd.img-* work/iso/live/initrd
 
-      - name: Configure GRUB Bootloader
+      - name: Create SquashFS
         run: |
-          # Write the boot menu configuration
+          sudo mksquashfs work/chroot work/iso/live/filesystem.squashfs -comp xz
+
+      - name: Create GRUB Boot Menu Configuration
+        run: |
           cat << 'EOF' > work/iso/boot/grub/grub.cfg
-          search --set=root --file /live/vmlinuz
+          set default="0"
+          set timeout=5
 
-          menuentry "Start StudentOS Live" {
+          menuentry "Start StudentOS" {
               linux /live/vmlinuz boot=live quiet splash
               initrd /live/initrd
           }
           EOF
 
-      - name: Compile Final ISO File
+      - name: Build the ISO
         run: |
-          # grub-mkrescue securely packages the ISO for both BIOS and UEFI
           grub-mkrescue -o studentos-amd64.iso work/iso
 
-      - name: Upload the Finished ISO
+      - name: Upload ISO Artifact
         uses: actions/upload-artifact@v4
         with:
           name: studentos-amd64
